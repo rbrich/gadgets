@@ -1,17 +1,22 @@
 // Read LDR and Temperature sensors every five minutes,
-// send values to TCP server (InfluxDB)
-// over Wi-Fi connection.
+// send values to TCP server (InfluxDB) over Wi-Fi connection.
+
+#include "temp_DS18B20.h"
 
 #include <Arduino.h>
 #include <ESP8266WiFi.h>
 
-static const int pin_led = D4;
+// Note that the pin numbers on PCB are the real numbers, eg. GPIO4 is 4, not D4
+static const int pin_led = 2;
 static const int pin_ldr = A0;
-static const int pin_rgb_red = D8;
-static const int pin_rgb_green = D6;
-static const int pin_rgb_blue = D7;
+static const int pin_rgb_red = 15;
+static const int pin_rgb_green = 12;
+static const int pin_rgb_blue = 13;
 
 int timer = 0;
+
+OneWire wire_temp(4);
+
 
 void setup()
 {
@@ -20,6 +25,8 @@ void setup()
   pinMode(pin_rgb_red, OUTPUT);
   pinMode(pin_rgb_green, OUTPUT);
   pinMode(pin_rgb_blue, OUTPUT);
+
+  setup_temperature(wire_temp);
 
   // pio device monitor
   Serial.begin(9600);
@@ -89,6 +96,10 @@ void loop()
     Serial.print("LDR: ");
     Serial.println(ldr_value);
 
+    // Read temperature sensor
+    float temperature;
+    bool temp_ok = read_temperature(wire_temp, temperature);
+
     // Send values to server
     WiFiClient client;
     const char* host = "server.lan";
@@ -99,6 +110,12 @@ void loop()
         Serial.println("* Sending data...");
         String data("ambient_light,device=ufo1,location=kitchen value=");
         data.concat(ldr_value);
+        data.concat('\n');
+        if (temp_ok) {
+            data.concat("temperature,device=ufo1,location=kitchen value=");
+            data.concat(temperature);
+            data.concat('\n');
+        }
         client.printf(
                 "POST /write?db=sensors HTTP/1.1\r\n"
                 "Host: %s:%d\r\n"
