@@ -1,10 +1,10 @@
 // Read LDR and Temperature sensors every five minutes,
 // send values to TCP server (InfluxDB) over Wi-Fi connection.
 
-#include "temp_DS18B20.h"
-
 #include <Arduino.h>
 #include <ESP8266WiFi.h>
+#include <OneWire.h>
+#include <DallasTemperature.h>
 
 // Note that the pin numbers on PCB are the real numbers, eg. GPIO4 is 4, not D4
 static const int pin_led = 2;
@@ -15,34 +15,69 @@ static const int pin_rgb_blue = 13;
 
 int timer = 0;
 
-OneWire wire_temp(4);
+OneWire temp_wire(4);
+DallasTemperature temp_sensor(&temp_wire);
+DeviceAddress temp_addr;
 
 
 void setup()
 {
-  pinMode(pin_led, OUTPUT);
-  pinMode(pin_ldr, INPUT);
-  pinMode(pin_rgb_red, OUTPUT);
-  pinMode(pin_rgb_green, OUTPUT);
-  pinMode(pin_rgb_blue, OUTPUT);
+    // Connect with: pio device monitor
+    Serial.begin(9600);
+    Serial.println();
+    Serial.println("=== Setup ===");
 
-  setup_temperature(wire_temp);
+    // LED + LDR pins
+    pinMode(pin_led, OUTPUT);
+    pinMode(pin_ldr, INPUT);
+    pinMode(pin_rgb_red, OUTPUT);
+    pinMode(pin_rgb_green, OUTPUT);
+    pinMode(pin_rgb_blue, OUTPUT);
 
-  // pio device monitor
-  Serial.begin(9600);
-  Serial.println("Begin");
+    // temperature sensor
+    Serial.println("--- Temperature ---");
+    temp_sensor.begin();
+    Serial.print("Found ");
+    Serial.print(temp_sensor.getDeviceCount(), DEC);
+    Serial.println(" temperature sensors.");
 
-  WiFi.begin("WIFI", "PASSWORD");
+    // report parasite power requirements
+    Serial.print("Parasite power is: ");
+    if (temp_sensor.isParasitePowerMode())
+        Serial.println("ON");
+    else
+        Serial.println("OFF");
 
-  Serial.print("Connecting");
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-  Serial.println();
+    if (temp_sensor.getAddress(temp_addr, 0)) {
+        Serial.print("Device 0 Address: ");
+        for (unsigned char ch : temp_addr) {
+            if (ch < 16) Serial.print("0");
+            Serial.print(ch, HEX);
+        }
+        Serial.println();
+    } else
+        Serial.println("Unable to find address for Device 0");
 
-  Serial.print("Connected, IP address: ");
-  Serial.println(WiFi.localIP());
+    Serial.print("Device 0 Resolution: ");
+    // sensors.setResolution(insideThermometer, 12);
+    Serial.print(temp_sensor.getResolution(temp_addr), DEC);
+    Serial.println();
+
+    // Setup Wi-Fi
+    Serial.println("--- Wi-Fi ---");
+    WiFi.begin("WIFI", "PASSWORD");
+
+    Serial.print("Connecting");
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(500);
+        Serial.print(".");
+    }
+    Serial.println();
+
+    Serial.print("Connected, IP address: ");
+    Serial.println(WiFi.localIP());
+
+    Serial.println("=== Loop ===");
 }
 
 
@@ -97,8 +132,11 @@ void loop()
     Serial.println(ldr_value);
 
     // Read temperature sensor
-    float temperature;
-    bool temp_ok = read_temperature(wire_temp, temperature);
+    temp_sensor.requestTemperaturesByAddress(temp_addr);
+    float temp_celsius = temp_sensor.getTempC(temp_addr);
+    Serial.print("Temperature: ");
+    Serial.print(temp_celsius);
+    Serial.println("°C");
 
     // Send values to server
     WiFiClient client;
@@ -111,9 +149,9 @@ void loop()
         String data("ambient_light,device=ufo1,location=kitchen value=");
         data.concat(ldr_value);
         data.concat('\n');
-        if (temp_ok) {
+        if (temp_celsius != DEVICE_DISCONNECTED_C) {
             data.concat("temperature,device=ufo1,location=kitchen value=");
-            data.concat(temperature);
+            data.concat(temp_celsius);
             data.concat('\n');
         }
         client.printf(
