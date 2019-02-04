@@ -1,6 +1,8 @@
 // Read LDR and Temperature sensors every five minutes,
 // send values to TCP server (InfluxDB) over Wi-Fi connection.
 
+#include "config.h"
+
 #include <Arduino.h>
 #include <ESP8266WiFi.h>
 #include <OneWire.h>
@@ -65,7 +67,7 @@ void setup()
 
     // Setup Wi-Fi
     Serial.println("--- Wi-Fi ---");
-    WiFi.begin("WIFI", "PASSWORD");
+    WiFi.begin(WIFI_SSID, WIFI_PASS);
 
     Serial.print("Connecting");
     while (WiFi.status() != WL_CONNECTED) {
@@ -138,30 +140,29 @@ void loop()
     Serial.print(temp_celsius);
     Serial.println("°C");
 
-    // Send values to server
+    // Send values to InfluxDB:
     WiFiClient client;
-    const char* host = "server.lan";
-    uint16_t port = 8086;
-    Serial.printf("\n* Connecting to %s ...\n", host);
-    if (client.connect(host, port)) {
+    Serial.println();
+    Serial.println("* Connecting to " DB_HOST " ...");
+    if (client.connect(DB_HOST, DB_PORT)) {
         Serial.printf("* Connected (%s)\n", client.remoteIP().toString().c_str());
         Serial.println("* Sending data...");
-        String data("ambient_light,device=ufo1,location=kitchen value=");
+        String data("ambient_light," DEVICE_TAGS " value=");
         data.concat(ldr_value);
         data.concat('\n');
         if (temp_celsius != DEVICE_DISCONNECTED_C) {
-            data.concat("temperature,device=ufo1,location=kitchen value=");
+            data.concat("temperature," DEVICE_TAGS " value=");
             data.concat(temp_celsius);
             data.concat('\n');
         }
         client.printf(
-                "POST /write?db=sensors HTTP/1.1\r\n"
-                "Host: %s:%d\r\n"
+                "POST /write?db=" DB_NAME " HTTP/1.1\r\n"
+                "Host: " DB_HOST ":%d\r\n"
                 "Connection: close\r\n"
                 "Content-Type: text/plain; charset=utf-8\r\n"
                 "Content-Length: %d\r\n"
                 "\r\n",
-                host, port, data.length());
+                DB_PORT, data.length());
         client.print(data);
 
         Serial.println("* Waiting for response...");
