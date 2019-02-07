@@ -3,6 +3,9 @@ project(gadgets)
 
 include(CMakeListsPrivate.txt)
 
+# Search our include dir BEFORE all others.
+add_compile_options("-iquote${CMAKE_CURRENT_LIST_DIR}/include")
+
 add_custom_target(
     PLATFORMIO_BUILD ALL
     COMMAND ${PLATFORMIO_CMD} -f -c clion run
