@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
 
-platformio init --ide clion --board nodemcu
+# TODO: run init with selected device + replace default env in platformio.ini
+
+#platformio init --ide clion --board nodemcu
+platformio init --ide clion --board d1_mini_pro
 platformio lib install DallasTemperature
