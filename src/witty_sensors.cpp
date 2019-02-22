@@ -5,8 +5,15 @@
 
 #include <Arduino.h>
 #include <ESP8266WiFi.h>
+
+#ifdef WITH_DALLAS_TEMP
 #include <OneWire.h>
 #include <DallasTemperature.h>
+#endif
+
+#ifdef WITH_SHT30
+#include <WEMOS_SHT3X.h>
+#endif
 
 #ifdef WITH_RGB
 static const int pin_rgb_red = 15;
@@ -22,6 +29,10 @@ static const int pin_ldr = A0;
 static OneWire temp_wire(4);
 static DallasTemperature temp_sensor(&temp_wire);
 static DeviceAddress temp_addr;
+#endif
+
+#ifdef WITH_SHT30
+static SHT3X sht30;
 #endif
 
 static int timer = 0;
@@ -154,9 +165,26 @@ void loop()
     // Read temperature sensor
     temp_sensor.requestTemperaturesByAddress(temp_addr);
     float temp_celsius = temp_sensor.getTempC(temp_addr);
+    if (temp_celsius == DEVICE_DISCONNECTED_C)
+        temp_celsius = 0;
     Serial.print("Temperature: ");
     Serial.print(temp_celsius);
     Serial.println("°C");
+#endif
+
+#ifdef WITH_SHT30
+    // Read temperature/humidity sensor
+    if (sht30.get() != 0) {
+        Serial.println("sht30: Error");
+    }
+    float temp_celsius = sht30.cTemp;
+    float humidity = sht30.humidity;
+    Serial.print("Temperature: ");
+    Serial.print(temp_celsius);
+    Serial.println("°C");
+    Serial.print("Relative Humidity: ");
+    Serial.print(humidity);
+    Serial.println("%");
 #endif
 
     // Send values to InfluxDB:
@@ -175,13 +203,23 @@ void loop()
         data.concat('\n');
 #endif
 
-#ifdef WITH_DALLAS_TEMP
-        if (temp_celsius != DEVICE_DISCONNECTED_C) {
+#if defined(WITH_DALLAS_TEMP) || defined(WITH_SHT30)
+        if (temp_celsius != 0) {
             data.concat("temperature," DEVICE_TAGS " value=");
             data.concat(temp_celsius);
             data.concat('\n');
         }
 #endif
+
+#ifdef WITH_SHT30
+        if (humidity != 0) {
+            data.concat("humidity," DEVICE_TAGS " value=");
+            data.concat(humidity);
+            data.concat('\n');
+        }
+#endif
+
+        Serial.println(data);
 
         client.printf(
                 "POST /write?db=" DB_NAME " HTTP/1.1\r\n"

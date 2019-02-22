@@ -5,3 +5,4 @@
 #platformio init --ide clion --board nodemcu
 platformio init --ide clion --board d1_mini_pro
 platformio lib install DallasTemperature
+platformio lib install 'WEMOS SHT3x'
