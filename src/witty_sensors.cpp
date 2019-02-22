@@ -15,6 +15,14 @@
 #include <WEMOS_SHT3X.h>
 #endif
 
+#ifdef WITH_OLED
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#endif
+
+// -----------------------------------------------------------------------------
+
 #ifdef WITH_RGB
 static const int pin_rgb_red = 15;
 static const int pin_rgb_green = 12;
@@ -33,6 +41,11 @@ static DeviceAddress temp_addr;
 
 #ifdef WITH_SHT30
 static SHT3X sht30;
+#endif
+
+#ifdef WITH_OLED
+#define OLED_RESET 0  // GPIO0
+static Adafruit_SSD1306 display(OLED_RESET);
 #endif
 
 static int timer = 0;
@@ -87,6 +100,11 @@ void setup()
     Serial.println();
 #endif
 
+#ifdef WITH_OLED
+    display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
+    display.display();
+#endif
+
     // Setup Wi-Fi
     Serial.println("--- Wi-Fi ---");
     WiFi.begin(WIFI_SSID, WIFI_PASS);
@@ -107,15 +125,15 @@ void setup()
 
 void loop()
 {
-    // Tick
-    timer++;
-
     // Reset LEDs
     digitalWrite(LED_BUILTIN, HIGH);
 #ifdef WITH_RGB
     analogWrite(pin_rgb_red, 0);
     analogWrite(pin_rgb_green, 0);
     analogWrite(pin_rgb_blue, 0);
+#endif
+#ifdef WITH_OLED
+    display.clearDisplay();
 #endif
     delay(500);
 
@@ -140,15 +158,38 @@ void loop()
             analogWrite(pin_rgb_blue, value);
 #endif
     }
+#ifdef WITH_OLED
+    display.setTextSize(1);
+    display.setCursor(0, 0);
+    display.setTextColor(WHITE);
+
+    {
+        int r = SEND_INTERVAL - timer;
+        display.printf("Send %d:%02d\n", r / 60, r % 60);
+    }
+
+#ifdef WITH_SHT30
+    sht30.get();
+    display.setCursor(0, 10);
+    display.print("Temp ");
+    display.print(sht30.cTemp);
+    display.setCursor(0, 20);
+    display.print("Humi ");
+    display.print(sht30.humidity);
+#endif
+
+    display.display();
+#endif
     delay(500);
 
     // Wait five minutes
-    if (t_mins == 5 && t_secs == 0) {
+    if (timer == SEND_INTERVAL) {
         // Trigger the action
         timer = 0;
         digitalWrite(LED_BUILTIN, LOW);
     } else {
         // Not yet
+        timer++;
         return;
     }
 
@@ -194,6 +235,14 @@ void loop()
     if (client.connect(DB_HOST, DB_PORT)) {
         Serial.printf("* Connected (%s)\n", client.remoteIP().toString().c_str());
         Serial.println("* Sending data...");
+#ifdef WITH_OLED
+        display.clearDisplay();
+        display.setTextSize(1);
+        display.setTextColor(WHITE);
+        display.setCursor(0, 0);
+        display.print("Sending...");
+        display.display();
+#endif
 
         String data;
 
@@ -232,11 +281,20 @@ void loop()
         client.print(data);
 
         Serial.println("* Waiting for response...");
-        while (client.connected() || client.available()) {
+        int t = 0;
+        while (client.connected()) {
             if (client.available()) {
                 String line = client.readStringUntil('\n');
                 Serial.println(line);
             }
+#ifdef WITH_OLED
+            display.setCursor(0, 10);
+            display.print("Receiving:");
+            display.fillRect(0, 20, uint16_t(t + 1), 10, WHITE);
+            display.display();
+            delay(1);
+            ++t;
+#endif
         }
         client.stop();
         Serial.println("* Connection closed");
