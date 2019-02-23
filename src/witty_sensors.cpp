@@ -43,6 +43,11 @@ static DeviceAddress temp_addr;
 static SHT3X sht30;
 #endif
 
+#ifdef WITH_MOIST
+static const int pin_moist = A0;
+static const int pin_moist_digi = D3;
+#endif
+
 #ifdef WITH_OLED
 #define OLED_RESET 0  // GPIO0
 static Adafruit_SSD1306 display(OLED_RESET);
@@ -106,8 +111,14 @@ void setup()
     Serial.println();
 #endif
 
+#ifdef WITH_MOIST
+    pinMode(pin_moist, INPUT);
+    pinMode(pin_moist_digi, INPUT);
+#endif
+
 #ifdef WITH_OLED
     display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
+    display.dim(1);
     display.display();
 #endif
 
@@ -129,9 +140,6 @@ void loop()
     analogWrite(pin_rgb_red, 0);
     analogWrite(pin_rgb_green, 0);
     analogWrite(pin_rgb_blue, 0);
-#endif
-#ifdef WITH_OLED
-    display.clearDisplay();
 #endif
     delay(500);
 
@@ -157,6 +165,7 @@ void loop()
 #endif
     }
 #ifdef WITH_OLED
+    display.clearDisplay();
     if (WiFi.isConnected()) {
         display.drawXBitmap(0, 0, WIFI_icon_bits, WIFI_icon_width, WIFI_icon_height, WHITE);
     }
@@ -178,6 +187,21 @@ void loop()
     display.setCursor(0, 22);
     display.print("Humi ");
     display.print(sht30.humidity);
+#endif
+
+#ifdef WITH_MOIST
+    {
+        float value = (1024 - analogRead(pin_moist)) / 7.68f;
+        int over_threshold = digitalRead(pin_moist_digi);
+        display.setCursor(0, 32);
+        display.printf("Mois %.1f%%", value);
+        if (over_threshold) {
+            display.setCursor(30, 40);
+            display.setTextColor(BLACK, WHITE);
+            display.print("water");
+            display.setTextColor(WHITE);
+        }
+    }
 #endif
 
     display.display();
@@ -248,6 +272,20 @@ void loop()
     Serial.println("%");
 #endif
 
+#ifdef WITH_MOIST
+    // Tested values:
+    // - emerged in water: 256
+    // - completely dry: 1024
+    // Output range is 0.0 (dry) - 100.0 (emerged in water)
+    float moisture = (1024 - analogRead(pin_moist)) / 7.68f;
+    Serial.print("Moisture: ");
+    Serial.print(moisture);
+    Serial.print(" (threshold: ");
+    int moisture_threshold = digitalRead(pin_moist_digi);
+    Serial.print(moisture_threshold);
+    Serial.println(")");
+#endif
+
     // Send values to InfluxDB:
     WiFiClient client;
     Serial.println();
@@ -285,6 +323,12 @@ void loop()
         }
 #endif
 
+#ifdef WITH_MOIST
+        data.concat("moisture," DEVICE_TAGS " value=");
+        data.concat(moisture);
+        data.concat('\n');
+#endif
+
         Serial.println(data);
 
         client.printf(
@@ -300,28 +344,23 @@ void loop()
 #ifdef WITH_OLED
         display.println("OK");
         display.setCursor(0, 32);
-        display.print("Recv");
+        display.print("Recv ");
         display.display();
 #endif
 
         Serial.println("* Waiting for response...");
-        int t = 0;
         while (client.connected()) {
             if (client.available()) {
                 String line = client.readStringUntil('\n');
                 Serial.println(line);
             }
-#ifdef WITH_OLED
-            if (t < display.width() - 30) {
-                display.fillRect(30, 32, uint16_t(t + 1), 8, WHITE);
-                display.display();
-                delay(1);
-                ++t;
-            }
-#endif
         }
         client.stop();
         Serial.println("* Connection closed");
+#ifdef WITH_OLED
+        display.println("OK");
+        display.display();
+#endif
     } else {
         Serial.println("* Connection failed.");
         client.stop();
