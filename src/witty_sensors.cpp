@@ -15,6 +15,11 @@
 #include <WEMOS_SHT3X.h>
 #endif
 
+#ifdef WITH_BMP280
+#include <Wire.h>
+#include <BMP280.h>
+#endif
+
 #ifdef WITH_OLED
 #include <Wire.h>
 #include <Adafruit_GFX.h>
@@ -46,6 +51,10 @@ static SHT3X sht30;
 #ifdef WITH_MOIST
 static const int pin_moist = A0;
 static const int pin_moist_digi = D3;
+#endif
+
+#ifdef WITH_BMP280
+static BMP280 bmp;
 #endif
 
 #ifdef WITH_OLED
@@ -116,6 +125,16 @@ void setup()
     pinMode(pin_moist_digi, INPUT);
 #endif
 
+#ifdef WITH_BMP280
+    Serial.println("--- BMP280 ---");
+    if (bmp.begin()) {
+        Serial.println("Found.");
+        bmp.setOversampling(4);
+    } else {
+        Serial.println("Failed.");
+    }
+#endif
+
 #ifdef WITH_OLED
     display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
     display.dim(1);
@@ -172,6 +191,7 @@ void loop()
 
     display.setTextSize(1);
     display.setTextColor(WHITE);
+    display.setTextWrap(0);
 
     {
         int r = SEND_INTERVAL - timer;
@@ -181,25 +201,48 @@ void loop()
 
 #ifdef WITH_SHT30
     sht30.get();
+#ifndef WITH_BMP280
     display.setCursor(0, 12);
     display.print("Temp ");
     display.print(sht30.cTemp);
+#endif
     display.setCursor(0, 22);
-    display.print("Humi ");
-    display.print(sht30.humidity);
+    display.printf("%.2f relH", sht30.humidity);
 #endif
 
 #ifdef WITH_MOIST
     {
         float value = (1024 - analogRead(pin_moist)) / 7.68f;
         int over_threshold = digitalRead(pin_moist_digi);
-        display.setCursor(0, 32);
-        display.printf("Mois %.1f%%", value);
+        display.setCursor(0, 40);
+        display.printf("%.1f soilM", value);
         if (over_threshold) {
-            display.setCursor(30, 40);
-            display.setTextColor(BLACK, WHITE);
-            display.print("water");
-            display.setTextColor(WHITE);
+            display.setCursor(54, 2);
+            display.print("*");
+        }
+    }
+#endif
+
+#ifdef WITH_BMP280
+    {
+        double temperature = 0, pressure = 0;
+        auto result = bmp.startMeasurment();
+        if (result != 0) {
+            delay(result);
+            result = bmp.getTemperatureAndPressure(temperature, pressure);
+            if (result != 0) {
+                display.setCursor(0, 13);
+                display.printf("%.2f", temperature);
+#ifdef WITH_SHT30
+                // Show also SHT30 temperature when available
+                // (the SHT30 shield is in vicinity of ESP board and should be hotter)
+                display.printf("/%.1f", sht30.cTemp);
+#else
+                display.print(" degC");
+#endif
+                display.setCursor(0, 31);
+                display.printf("%.1f hPa", pressure);
+            }
         }
     }
 #endif
@@ -246,13 +289,14 @@ void loop()
     Serial.println(ldr_value);
 #endif
 
+    double temp_celsius = 0;
 #ifdef WITH_DALLAS_TEMP
     // Read temperature sensor
     temp_sensor.requestTemperaturesByAddress(temp_addr);
-    float temp_celsius = temp_sensor.getTempC(temp_addr);
+    temp_celsius = temp_sensor.getTempC(temp_addr);
     if (temp_celsius == DEVICE_DISCONNECTED_C)
         temp_celsius = 0;
-    Serial.print("Temperature: ");
+    Serial.print("[dallas] Temperature: ");
     Serial.print(temp_celsius);
     Serial.println("°C");
 #endif
@@ -262,14 +306,31 @@ void loop()
     if (sht30.get() != 0) {
         Serial.println("sht30: Error");
     }
-    float temp_celsius = sht30.cTemp;
+    temp_celsius = sht30.cTemp;
     float humidity = sht30.humidity;
-    Serial.print("Temperature: ");
+    Serial.print("[SHT30] Temperature: ");
     Serial.print(temp_celsius);
     Serial.println("°C");
-    Serial.print("Relative Humidity: ");
+    Serial.print("[SHT30] Relative Humidity: ");
     Serial.print(humidity);
     Serial.println("%");
+#endif
+
+#ifdef WITH_BMP280
+    double pressure = 0;
+    auto result = bmp.startMeasurment();
+    if (result != 0) {
+        delay(result);
+        result = bmp.getTemperatureAndPressure(temp_celsius, pressure);
+        if (result != 0) {
+            Serial.print("[BMP280] Temperature: ");
+            Serial.print(temp_celsius);
+            Serial.println("°C");
+            Serial.print("BMP280 Pressure: ");
+            Serial.print(pressure);
+            Serial.println(" hPa");
+        }
+    }
 #endif
 
 #ifdef WITH_MOIST
@@ -307,7 +368,7 @@ void loop()
         data.concat('\n');
 #endif
 
-#if defined(WITH_DALLAS_TEMP) || defined(WITH_SHT30)
+#if defined(WITH_DALLAS_TEMP) || defined(WITH_SHT30) || defined(WITH_BMP280)
         if (temp_celsius != 0) {
             data.concat("temperature," DEVICE_TAGS " value=");
             data.concat(temp_celsius);
@@ -319,6 +380,14 @@ void loop()
         if (humidity != 0) {
             data.concat("humidity," DEVICE_TAGS " value=");
             data.concat(humidity);
+            data.concat('\n');
+        }
+#endif
+
+#ifdef WITH_BMP280
+        if (pressure != 0) {
+            data.concat("pressure," DEVICE_TAGS " value=");
+            data.concat(pressure);
             data.concat('\n');
         }
 #endif

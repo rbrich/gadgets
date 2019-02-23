@@ -6,3 +6,4 @@
 platformio init --ide clion --board d1_mini_pro
 platformio lib install DallasTemperature
 platformio lib install 'WEMOS SHT3x'
+platformio lib install 2954  # BMP280
