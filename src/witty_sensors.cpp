@@ -46,6 +46,12 @@ static SHT3X sht30;
 #ifdef WITH_OLED
 #define OLED_RESET 0  // GPIO0
 static Adafruit_SSD1306 display(OLED_RESET);
+// WIFI_icon.xbm
+#define WIFI_icon_width 10
+#define WIFI_icon_height 10
+static unsigned char WIFI_icon_bits[] = {
+        0x1c, 0x00, 0x60, 0x00, 0x8c, 0x00, 0x30, 0x01, 0x44, 0x01, 0x58, 0x02,
+        0x92, 0x02, 0xa6, 0x02, 0x0f, 0x00, 0x03, 0x00 };
 #endif
 
 static int timer = 0;
@@ -107,17 +113,9 @@ void setup()
 
     // Setup Wi-Fi
     Serial.println("--- Wi-Fi ---");
+    WiFi.mode(WIFI_STA);
     WiFi.begin(WIFI_SSID, WIFI_PASS);
-
-    Serial.print("Connecting");
-    while (WiFi.status() != WL_CONNECTED) {
-        delay(500);
-        Serial.print(".");
-    }
-    Serial.println();
-
-    Serial.print("Connected, IP address: ");
-    Serial.println(WiFi.localIP());
+    wifi_set_sleep_type(LIGHT_SLEEP_T);
 
     Serial.println("=== Loop ===");
 }
@@ -159,21 +157,25 @@ void loop()
 #endif
     }
 #ifdef WITH_OLED
+    if (WiFi.isConnected()) {
+        display.drawXBitmap(0, 0, WIFI_icon_bits, WIFI_icon_width, WIFI_icon_height, WHITE);
+    }
+
     display.setTextSize(1);
-    display.setCursor(0, 0);
     display.setTextColor(WHITE);
 
     {
         int r = SEND_INTERVAL - timer;
-        display.printf("Send %d:%02d\n", r / 60, r % 60);
+        display.setCursor(14, 2);
+        display.printf("T-%d:%02d\n", r / 60, r % 60);
     }
 
 #ifdef WITH_SHT30
     sht30.get();
-    display.setCursor(0, 10);
+    display.setCursor(0, 12);
     display.print("Temp ");
     display.print(sht30.cTemp);
-    display.setCursor(0, 20);
+    display.setCursor(0, 22);
     display.print("Humi ");
     display.print(sht30.humidity);
 #endif
@@ -194,6 +196,24 @@ void loop()
     }
 
     // ------------------------------------------------------------------------
+
+#ifdef WITH_OLED
+    display.clearDisplay();
+    display.setCursor(0, 12);
+    display.print("Conn ");
+    display.display();
+#endif
+
+    // Need Wi-Fi
+    if (!WiFi.isConnected())
+        return;
+    Serial.print("Wi-Fi connected, IP address: ");
+    Serial.println(WiFi.localIP());
+
+#ifdef WITH_OLED
+    display.println("OK");
+    display.display();
+#endif
 
 #ifdef WITH_LDR
     // Read light sensor
@@ -232,17 +252,14 @@ void loop()
     WiFiClient client;
     Serial.println();
     Serial.println("* Connecting to " DB_HOST " ...");
+#ifdef WITH_OLED
+    display.setCursor(0, 22);
+    display.print("Send ");
+    display.display();
+#endif
     if (client.connect(DB_HOST, DB_PORT)) {
         Serial.printf("* Connected (%s)\n", client.remoteIP().toString().c_str());
         Serial.println("* Sending data...");
-#ifdef WITH_OLED
-        display.clearDisplay();
-        display.setTextSize(1);
-        display.setTextColor(WHITE);
-        display.setCursor(0, 0);
-        display.print("Sending...");
-        display.display();
-#endif
 
         String data;
 
@@ -280,6 +297,13 @@ void loop()
                 DB_PORT, data.length());
         client.print(data);
 
+#ifdef WITH_OLED
+        display.println("OK");
+        display.setCursor(0, 32);
+        display.print("Recv");
+        display.display();
+#endif
+
         Serial.println("* Waiting for response...");
         int t = 0;
         while (client.connected()) {
@@ -288,12 +312,12 @@ void loop()
                 Serial.println(line);
             }
 #ifdef WITH_OLED
-            display.setCursor(0, 10);
-            display.print("Receiving:");
-            display.fillRect(0, 20, uint16_t(t + 1), 10, WHITE);
-            display.display();
-            delay(1);
-            ++t;
+            if (t < display.width() - 30) {
+                display.fillRect(30, 32, uint16_t(t + 1), 8, WHITE);
+                display.display();
+                delay(1);
+                ++t;
+            }
 #endif
         }
         client.stop();
@@ -301,5 +325,10 @@ void loop()
     } else {
         Serial.println("* Connection failed.");
         client.stop();
+#ifdef WITH_OLED
+        display.println("FAIL");
+        display.display();
+        delay(1000);
+#endif
     }
 }
