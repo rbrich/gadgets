@@ -79,6 +79,9 @@ void setup()
 
     // LED pins
     pinMode(LED_BUILTIN, OUTPUT);
+#ifdef WITH_CUSTOM_LED
+    pinMode(D0, OUTPUT);
+#endif
 #ifdef WITH_RGB
     pinMode(pin_rgb_red, OUTPUT);
     pinMode(pin_rgb_green, OUTPUT);
@@ -220,6 +223,10 @@ void loop()
             display.setCursor(54, 2);
             display.print("*");
         }
+#ifdef WITH_CUSTOM_LED
+        // Light up custom LED when moisture goes under custom threshold
+        digitalWrite(D0, (value < 25) ? HIGH : LOW);
+#endif
     }
 #endif
 
