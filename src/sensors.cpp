@@ -333,7 +333,7 @@ void loop()
             Serial.print("[BMP280] Temperature: ");
             Serial.print(temp_celsius);
             Serial.println("°C");
-            Serial.print("BMP280 Pressure: ");
+            Serial.print("[BMP280] Pressure: ");
             Serial.print(pressure);
             Serial.println(" hPa");
         }
@@ -346,7 +346,7 @@ void loop()
     // - completely dry: 1024
     // Output range is 0.0 (dry) - 100.0 (emerged in water)
     float moisture = (1024 - analogRead(pin_moist)) / 7.68f;
-    Serial.print("Moisture: ");
+    Serial.print("[soil] Moisture: ");
     Serial.print(moisture);
     Serial.print(" (threshold: ");
     int moisture_threshold = digitalRead(pin_moist_digi);

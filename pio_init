@@ -7,3 +7,5 @@ platformio init --ide clion --board d1_mini_pro
 platformio lib install DallasTemperature
 platformio lib install 'WEMOS SHT3x'
 platformio lib install 2954  # BMP280
+platformio lib install 2104  # SSD1306 OLED driver library for Wemos D1 Mini OLED shield
+platformio lib install 13    # Adafruit GFX Library
