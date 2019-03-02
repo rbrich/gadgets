@@ -1,11 +1,89 @@
 #!/usr/bin/env bash
 
-# TODO: run init with selected device + replace default env in platformio.ini
+# Check dependencies
+if ! which crudini >/dev/null ; then
+    echo "Please install 'crudini' tool."
+    echo "http://www.pixelbeat.org/programs/crudini/"
+    echo
+    echo "With Python:  pip install crudini"
+    echo "In Debian:    apt install crudini"
+    exit 1
+fi
 
-#platformio init --ide clion --board nodemcu
-platformio init --ide clion --board d1_mini_pro
-platformio lib install DallasTemperature
-platformio lib install 'WEMOS SHT3x'
-platformio lib install 2954  # BMP280
-platformio lib install 2104  # SSD1306 OLED driver library for Wemos D1 Mini OLED shield
-platformio lib install 13    # Adafruit GFX Library
+# Parse arguments
+DRY_RUN=0
+ENV=
+
+usage() {
+    echo "Usage: $0 [-h] [-n] [ENV]"
+    echo "  -h      This help"
+    echo "  -n      Dry run (just print commands)"
+    echo "  ENV     Select env, see 'platformio.ini'"
+    echo "Run without arguments to get list of known ENVs."
+}
+
+run() { echo "=> $@"; [[ "$DRY_RUN" -eq 1 ]] || "$@"; }
+
+while [[ "$#" > 0 ]]; do
+    case "$1" in
+        -h) usage; exit 0 ;;
+        -n) DRY_RUN=1 ;;
+        *)  if [[ -z "$ENV" ]]; then ENV="$1"; else usage; exit 1; fi ;;
+    esac
+    shift
+done
+
+# Select env interactively
+ENV_DEFAULT=$(crudini --get platformio.ini platformio env_default)
+if [[ -z "$ENV" ]]; then
+    # Show options
+    ENV_LIST=($(crudini --get platformio.ini | grep 'env:' | cut -d: -f2))
+    ENV_COUNT=${#ENV_LIST[@]}
+    for i in `seq 1 ${ENV_COUNT}`; do
+        ITEM="${ENV_LIST[i-1]}"
+        [[ "$ITEM" = "$ENV_DEFAULT" ]] && printf " * " || printf "   "
+        printf "[$i]\t$ITEM\n"
+    done
+
+    # Ask and process answer
+    read -p "Select env [$ENV_DEFAULT]: " ANS
+    if [[ -z "$ANS" ]] ; then
+        ENV=${ENV_DEFAULT}
+    elif [[ "$ANS" -gt 0 && "$ANS" -le "$ENV_COUNT" ]] ; then
+        ENV="${ENV_LIST[ANS-1]}"
+    else
+        for i in `seq 1 ${ENV_COUNT}`; do
+            ITEM="${ENV_LIST[i-1]}"
+            if [[ "$ITEM" = "$ANS" ]]; then
+                ENV=${ITEM}
+            fi
+        done
+    fi
+    if [[ -z "$ENV" ]]; then
+        echo "Bad answer."
+        exit 1
+    fi
+fi
+
+# Update platform.ini (env_default)
+if [[ "$ENV" != "$ENV_DEFAULT" ]]; then
+    run crudini --set platformio.ini platformio env_default ${ENV}
+fi
+
+# Call pio init with selected board
+BOARD=$(crudini --get platformio.ini env:${ENV} board)
+run platformio init --ide clion --board ${BOARD}
+
+# Install additional libs
+BUILD_FLAGS=$(crudini --get platformio.ini env:${ENV} build_flags)
+for flag in ${BUILD_FLAGS}; do
+    case "$flag" in
+        -DWITH_DALLAS_TEMP) run platformio lib install 54;;     # DallasTemperature
+        -DWITH_SHT30)       run platformio lib install 2932;;   # WEMOS SHT3x
+        -DWITH_BMP280)      run platformio lib install 2954;;   # BMP280
+        -DWITH_OLED)
+            run platformio lib install 2104   # SSD1306 OLED driver library for Wemos D1 Mini OLED shield
+            run platformio lib install 13     # Adafruit GFX Library
+            ;;
+    esac
+done
