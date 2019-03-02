@@ -2,4 +2,4 @@
 .pioenvs
 .piolibdeps
 CMakeListsPrivate.txt
-/include/config.h
+/src/config.h
