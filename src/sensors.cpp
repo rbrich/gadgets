@@ -366,7 +366,6 @@ void loop()
     if (client.connect(DB_HOST, DB_PORT)) {
         Serial.printf("* Connected (%s)\n", client.remoteIP().toString().c_str());
         Serial.println("* Sending data...");
-
         String data;
 
 #ifdef WITH_LDR
@@ -425,7 +424,7 @@ void loop()
 #endif
 
         Serial.println("* Waiting for response...");
-        while (client.connected()) {
+        while (client.connected() || client.available()) {
             if (client.available()) {
                 String line = client.readStringUntil('\n');
                 Serial.println(line);
