@@ -2,6 +2,7 @@
 // send values to TCP server (InfluxDB) over Wi-Fi connection.
 
 #include "config.h"
+#include "Display.h"
 
 #include <Arduino.h>
 #include <ESP8266WiFi.h>
@@ -18,12 +19,6 @@
 #ifdef WITH_BMP280
 #include <Wire.h>
 #include <BMP280.h>
-#endif
-
-#ifdef WITH_OLED
-#include <Wire.h>
-#include <Adafruit_GFX.h>
-#include <Adafruit_SSD1306.h>
 #endif
 
 // -----------------------------------------------------------------------------
@@ -57,17 +52,7 @@ static const int pin_moist_digi = D3;
 static BMP280 bmp;
 #endif
 
-#ifdef WITH_OLED
-#define OLED_RESET 0  // GPIO0
-static Adafruit_SSD1306 display(OLED_RESET);
-// WIFI_icon.xbm
-#define WIFI_icon_width 10
-#define WIFI_icon_height 10
-static unsigned char WIFI_icon_bits[] = {
-        0x1c, 0x00, 0x60, 0x00, 0x8c, 0x00, 0x30, 0x01, 0x44, 0x01, 0x58, 0x02,
-        0x92, 0x02, 0xa6, 0x02, 0x0f, 0x00, 0x03, 0x00 };
-#endif
-
+static Display display;
 static int timer = 0;
 
 void setup()
@@ -138,11 +123,7 @@ void setup()
     }
 #endif
 
-#ifdef WITH_OLED
-    display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
-    display.dim(1);
-    display.display();
-#endif
+    display.begin();
 
     // Setup Wi-Fi
     Serial.println("--- Wi-Fi ---");
@@ -186,42 +167,27 @@ void loop()
             analogWrite(pin_rgb_blue, value);
 #endif
     }
-#ifdef WITH_OLED
-    display.clearDisplay();
+    display.clear();
     if (WiFi.isConnected()) {
-        display.drawXBitmap(0, 0, WIFI_icon_bits, WIFI_icon_width, WIFI_icon_height, WHITE);
+        display.drawWifiIcon();
     }
-
-    display.setTextSize(1);
-    display.setTextColor(WHITE);
-    display.setTextWrap(0);
-
-    {
-        int r = SEND_INTERVAL - timer;
-        display.setCursor(14, 2);
-        display.printf("T-%d:%02d\n", r / 60, r % 60);
-    }
+    display.drawTimer(SEND_INTERVAL - timer);
 
 #ifdef WITH_SHT30
     sht30.get();
 #ifndef WITH_BMP280
-    display.setCursor(0, 12);
-    display.print("Temp ");
-    display.print(sht30.cTemp);
+    display.drawValue(1, "%.2f degC", sht30.cTemp);
 #endif
-    display.setCursor(0, 22);
-    display.printf("%.2f relH", sht30.humidity);
+    display.drawValue(2, "%.2f relH", sht30.humidity);
 #endif
 
 #ifdef WITH_MOIST
     {
         float value = (1024 - analogRead(pin_moist)) / 7.68f;
         int over_threshold = digitalRead(pin_moist_digi);
-        display.setCursor(0, 40);
-        display.printf("%.1f soilM", value);
+        display.drawValue(4, "%.1f soilM", value);
         if (over_threshold) {
-            display.setCursor(54, 2);
-            display.print("*");
+            display.drawStar();
         }
 #ifdef WITH_CUSTOM_LED
         // Light up custom LED when moisture goes under custom threshold
@@ -237,25 +203,25 @@ void loop()
         if (result != 0) {
             delay(result);
             result = bmp.getTemperatureAndPressure(temperature, pressure);
+#ifdef BMP280_TEMP_CORRECTION
+            temperature += BMP280_TEMP_CORRECTION;
+#endif
             if (result != 0) {
-                display.setCursor(0, 13);
-                display.printf("%.2f", temperature);
+                display.drawValue(1, "%.2f", temperature);
 #ifdef WITH_SHT30
                 // Show also SHT30 temperature when available
                 // (the SHT30 shield is in vicinity of ESP board and should be hotter)
-                display.printf("/%.1f", sht30.cTemp);
+                display.appendValue("/%.1f", sht30.cTemp);
 #else
-                display.print(" degC");
+                display.appendText(" degC");
 #endif
-                display.setCursor(0, 31);
-                display.printf("%.1f hPa", pressure);
+                display.drawValue(3, "%.1f hPa", pressure);
             }
         }
     }
 #endif
 
     display.display();
-#endif
     delay(500);
 
     // Wait five minutes
@@ -271,12 +237,9 @@ void loop()
 
     // ------------------------------------------------------------------------
 
-#ifdef WITH_OLED
-    display.clearDisplay();
-    display.setCursor(0, 12);
-    display.print("Conn ");
+    display.clear();
+    display.drawText(1, "Conn ");
     display.display();
-#endif
 
     // Need Wi-Fi
     if (!WiFi.isConnected())
@@ -284,10 +247,8 @@ void loop()
     Serial.print("Wi-Fi connected, IP address: ");
     Serial.println(WiFi.localIP());
 
-#ifdef WITH_OLED
-    display.println("OK");
+    display.appendText("OK");
     display.display();
-#endif
 
 #ifdef WITH_LDR
     // Read light sensor
@@ -329,6 +290,9 @@ void loop()
     if (result != 0) {
         delay(result);
         result = bmp.getTemperatureAndPressure(temp_celsius, pressure);
+#ifdef BMP280_TEMP_CORRECTION
+        temp_celsius += BMP280_TEMP_CORRECTION;
+#endif
         if (result != 0) {
             Serial.print("[BMP280] Temperature: ");
             Serial.print(temp_celsius);
@@ -358,11 +322,8 @@ void loop()
     WiFiClient client;
     Serial.println();
     Serial.println("* Connecting to " DB_HOST " ...");
-#ifdef WITH_OLED
-    display.setCursor(0, 22);
-    display.print("Send ");
+    display.drawText(2, "Send ");
     display.display();
-#endif
     if (client.connect(DB_HOST, DB_PORT)) {
         Serial.printf("* Connected (%s)\n", client.remoteIP().toString().c_str());
         Serial.println("* Sending data...");
@@ -416,12 +377,9 @@ void loop()
                 DB_PORT, data.length());
         client.print(data);
 
-#ifdef WITH_OLED
-        display.println("OK");
-        display.setCursor(0, 32);
-        display.print("Recv ");
+        display.appendText("OK");
+        display.drawText(3, "Recv ");
         display.display();
-#endif
 
         Serial.println("* Waiting for response...");
         while (client.connected() || client.available()) {
@@ -432,17 +390,13 @@ void loop()
         }
         client.stop();
         Serial.println("* Connection closed");
-#ifdef WITH_OLED
-        display.println("OK");
+        display.appendText("OK");
         display.display();
-#endif
     } else {
         Serial.println("* Connection failed.");
         client.stop();
-#ifdef WITH_OLED
-        display.println("FAIL");
+        display.appendText("FAIL");
         display.display();
         delay(1000);
-#endif
     }
 }
