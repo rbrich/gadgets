@@ -86,8 +86,10 @@ void Display::appendValue(const char *format, double value)
 
 void Display::begin() {}
 void Display::clear() {}
+void Display::display() {}
 void Display::drawWifiIcon() {}
 void Display::drawTimer(int seconds) {}
+void Display::drawStar() {}
 void Display::drawText(int line, const char *text) {}
 void Display::appendText(const char *text) {}
 void Display::drawValue(int line, const char *format, double value) {}

@@ -3,23 +3,10 @@
 
 #include "config.h"
 #include "Display.h"
+#include "Sensor.h"
 
 #include <Arduino.h>
 #include <ESP8266WiFi.h>
-
-#ifdef WITH_DALLAS_TEMP
-#include <OneWire.h>
-#include <DallasTemperature.h>
-#endif
-
-#ifdef WITH_SHT30
-#include <WEMOS_SHT3X.h>
-#endif
-
-#ifdef WITH_BMP280
-#include <Wire.h>
-#include <BMP280.h>
-#endif
 
 // -----------------------------------------------------------------------------
 
@@ -29,28 +16,6 @@ static const int pin_rgb_green = 12;
 static const int pin_rgb_blue = 13;
 #endif
 
-#ifdef WITH_LDR
-static const int pin_ldr = A0;
-#endif
-
-#ifdef WITH_DALLAS_TEMP
-static OneWire temp_wire(4);
-static DallasTemperature temp_sensor(&temp_wire);
-static DeviceAddress temp_addr;
-#endif
-
-#ifdef WITH_SHT30
-static SHT3X sht30;
-#endif
-
-#ifdef WITH_MOIST
-static const int pin_moist = A0;
-static const int pin_moist_digi = D3;
-#endif
-
-#ifdef WITH_BMP280
-static BMP280 bmp;
-#endif
 
 static Display display;
 static int timer = 0;
@@ -64,64 +29,16 @@ void setup()
 
     // LED pins
     pinMode(LED_BUILTIN, OUTPUT);
-#ifdef WITH_CUSTOM_LED
-    pinMode(D0, OUTPUT);
-#endif
+
 #ifdef WITH_RGB
     pinMode(pin_rgb_red, OUTPUT);
     pinMode(pin_rgb_green, OUTPUT);
     pinMode(pin_rgb_blue, OUTPUT);
 #endif
 
-#ifdef WITH_LDR
-    pinMode(pin_ldr, INPUT);
-#endif
-
-#ifdef WITH_DALLAS_TEMP
-    // temperature sensor
-    Serial.println("--- Temperature ---");
-    temp_sensor.begin();
-    Serial.print("Found ");
-    Serial.print(temp_sensor.getDeviceCount(), DEC);
-    Serial.println(" temperature sensors.");
-
-    // report parasite power requirements
-    Serial.print("Parasite power is: ");
-    if (temp_sensor.isParasitePowerMode())
-        Serial.println("ON");
-    else
-        Serial.println("OFF");
-
-    if (temp_sensor.getAddress(temp_addr, 0)) {
-        Serial.print("Device 0 Address: ");
-        for (unsigned char ch : temp_addr) {
-            if (ch < 16) Serial.print("0");
-            Serial.print(ch, HEX);
-        }
-        Serial.println();
-    } else
-        Serial.println("Unable to find address for Device 0");
-
-    Serial.print("Device 0 Resolution: ");
-    // sensors.setResolution(insideThermometer, 12);
-    Serial.print(temp_sensor.getResolution(temp_addr), DEC);
-    Serial.println();
-#endif
-
-#ifdef WITH_MOIST
-    pinMode(pin_moist, INPUT);
-    pinMode(pin_moist_digi, INPUT);
-#endif
-
-#ifdef WITH_BMP280
-    Serial.println("--- BMP280 ---");
-    if (bmp.begin()) {
-        Serial.println("Found.");
-        bmp.setOversampling(4);
-    } else {
-        Serial.println("Failed.");
-    }
-#endif
+    Sensor::for_each([](Sensor& sensor) {
+        sensor.setup();
+    });
 
     display.begin();
 
@@ -173,53 +90,10 @@ void loop()
     }
     display.drawTimer(SEND_INTERVAL - timer);
 
-#ifdef WITH_SHT30
-    sht30.get();
-#ifndef WITH_BMP280
-    display.drawValue(1, "%.2f degC", sht30.cTemp);
-#endif
-    display.drawValue(2, "%.2f relH", sht30.humidity);
-#endif
-
-#ifdef WITH_MOIST
-    {
-        float value = (1024 - analogRead(pin_moist)) / 7.68f;
-        int over_threshold = digitalRead(pin_moist_digi);
-        display.drawValue(4, "%.1f soilM", value);
-        if (over_threshold) {
-            display.drawStar();
-        }
-#ifdef WITH_CUSTOM_LED
-        // Light up custom LED when moisture goes under custom threshold
-        digitalWrite(D0, (value < 25) ? HIGH : LOW);
-#endif
-    }
-#endif
-
-#ifdef WITH_BMP280
-    {
-        double temperature = 0, pressure = 0;
-        auto result = bmp.startMeasurment();
-        if (result != 0) {
-            delay(result);
-            result = bmp.getTemperatureAndPressure(temperature, pressure);
-#ifdef BMP280_TEMP_CORRECTION
-            temperature += BMP280_TEMP_CORRECTION;
-#endif
-            if (result != 0) {
-                display.drawValue(1, "%.2f", temperature);
-#ifdef WITH_SHT30
-                // Show also SHT30 temperature when available
-                // (the SHT30 shield is in vicinity of ESP board and should be hotter)
-                display.appendValue("/%.1f", sht30.cTemp);
-#else
-                display.appendText(" degC");
-#endif
-                display.drawValue(3, "%.1f hPa", pressure);
-            }
-        }
-    }
-#endif
+    Sensor::for_each([](Sensor& sensor) {
+        sensor.read();
+        sensor.output_to_display(display);
+    });
 
     display.display();
     delay(500);
@@ -250,73 +124,10 @@ void loop()
     display.appendText("OK");
     display.display();
 
-#ifdef WITH_LDR
-    // Read light sensor
-    int ldr_value = analogRead(pin_ldr);
-    Serial.print("LDR: ");
-    Serial.println(ldr_value);
-#endif
-
-    double temp_celsius = 0;
-#ifdef WITH_DALLAS_TEMP
-    // Read temperature sensor
-    temp_sensor.requestTemperaturesByAddress(temp_addr);
-    temp_celsius = temp_sensor.getTempC(temp_addr);
-    if (temp_celsius == DEVICE_DISCONNECTED_C)
-        temp_celsius = 0;
-    Serial.print("[dallas] Temperature: ");
-    Serial.print(temp_celsius);
-    Serial.println("°C");
-#endif
-
-#ifdef WITH_SHT30
-    // Read temperature/humidity sensor
-    if (sht30.get() != 0) {
-        Serial.println("sht30: Error");
-    }
-    temp_celsius = sht30.cTemp;
-    float humidity = sht30.humidity;
-    Serial.print("[SHT30] Temperature: ");
-    Serial.print(temp_celsius);
-    Serial.println("°C");
-    Serial.print("[SHT30] Relative Humidity: ");
-    Serial.print(humidity);
-    Serial.println("%");
-#endif
-
-#ifdef WITH_BMP280
-    double pressure = 0;
-    auto result = bmp.startMeasurment();
-    if (result != 0) {
-        delay(result);
-        result = bmp.getTemperatureAndPressure(temp_celsius, pressure);
-#ifdef BMP280_TEMP_CORRECTION
-        temp_celsius += BMP280_TEMP_CORRECTION;
-#endif
-        if (result != 0) {
-            Serial.print("[BMP280] Temperature: ");
-            Serial.print(temp_celsius);
-            Serial.println("°C");
-            Serial.print("[BMP280] Pressure: ");
-            Serial.print(pressure);
-            Serial.println(" hPa");
-        }
-    }
-#endif
-
-#ifdef WITH_MOIST
-    // Tested values:
-    // - emerged in water: 256
-    // - completely dry: 1024
-    // Output range is 0.0 (dry) - 100.0 (emerged in water)
-    float moisture = (1024 - analogRead(pin_moist)) / 7.68f;
-    Serial.print("[soil] Moisture: ");
-    Serial.print(moisture);
-    Serial.print(" (threshold: ");
-    int moisture_threshold = digitalRead(pin_moist_digi);
-    Serial.print(moisture_threshold);
-    Serial.println(")");
-#endif
+    Sensor::for_each([](Sensor& sensor) {
+        sensor.read();
+        sensor.output_to_stream(Serial);
+    });
 
     // Send values to InfluxDB:
     WiFiClient client;
@@ -329,41 +140,9 @@ void loop()
         Serial.println("* Sending data...");
         String data;
 
-#ifdef WITH_LDR
-        data.concat("ambient_light," DEVICE_TAGS " value=");
-        data.concat(ldr_value);
-        data.concat('\n');
-#endif
-
-#if defined(WITH_DALLAS_TEMP) || defined(WITH_SHT30) || defined(WITH_BMP280)
-        if (temp_celsius != 0) {
-            data.concat("temperature," DEVICE_TAGS " value=");
-            data.concat(temp_celsius);
-            data.concat('\n');
-        }
-#endif
-
-#ifdef WITH_SHT30
-        if (humidity != 0) {
-            data.concat("humidity," DEVICE_TAGS " value=");
-            data.concat(humidity);
-            data.concat('\n');
-        }
-#endif
-
-#ifdef WITH_BMP280
-        if (pressure != 0) {
-            data.concat("pressure," DEVICE_TAGS " value=");
-            data.concat(pressure);
-            data.concat('\n');
-        }
-#endif
-
-#ifdef WITH_MOIST
-        data.concat("moisture," DEVICE_TAGS " value=");
-        data.concat(moisture);
-        data.concat('\n');
-#endif
+        Sensor::for_each([&data](Sensor& sensor) {
+            sensor.output_to_database(data);
+        });
 
         Serial.println(data);
 
