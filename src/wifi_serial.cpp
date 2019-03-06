@@ -10,18 +10,23 @@ static WiFiClient client;
 constexpr size_t buffer_size = 1024;
 static uint8_t buffer[buffer_size];
 
+// The buffer type in read() methods differ...
+char* buffer_for_read(HardwareSerial&) { return (char*) buffer; }
+uint8_t* buffer_for_read(WiFiClient&) { return buffer; }
 
-void forward_input(Stream& rstream, Stream& wstream)
+template <typename TRead, typename TWrite>
+void forward_stream(TRead& rstream, TWrite& wstream)
 {
-    size_t i = 0;
-    while (i < buffer_size) {
-        int b = rstream.read();
-        if (b == -1)
-            break;
-        buffer[i++] = (uint8_t) b;
-    }
-    if (i > 0) {
-        wstream.write(buffer, i);
+    auto avail = (size_t) rstream.available();
+    if (avail > 0 && wstream.availableForWrite() >= avail) {
+        if (avail > buffer_size)
+            avail = buffer_size;
+        size_t bytes_read = rstream.read(buffer_for_read(rstream), avail);
+        size_t bytes_written = 0;
+        while (bytes_read > bytes_written) {
+            bytes_written += wstream.write(buffer + bytes_written,
+                                           bytes_read - bytes_written);
+        }
     }
 }
 
@@ -38,7 +43,7 @@ void setup()
     if (WiFi.waitForConnectResult() == WL_CONNECTED) {
         server.begin();
     }
-    WiFiClient::setDefaultSync(true);
+    WiFiClient::setDefaultNoDelay(true);
     digitalWrite(LED_BUILTIN, HIGH);
 }
 
@@ -57,12 +62,11 @@ void loop()
     if (client.connected()) {
         // pass data between client and serial
         digitalWrite(LED_BUILTIN, LOW);
-        forward_input(client, Serial);
-        forward_input(Serial, client);
+        forward_stream(client, Serial);
+        forward_stream(Serial, client);
         digitalWrite(LED_BUILTIN, HIGH);
     } else {
         // wait for a client to connect
         client = server.available();
     }
-    delay(100);
 }
