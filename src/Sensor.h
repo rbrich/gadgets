@@ -19,6 +19,8 @@
 #include <BMP280.h>
 #endif
 
+#include <Stream.h>
+
 
 class Sensor {
 public:

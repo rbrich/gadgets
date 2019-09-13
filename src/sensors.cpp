@@ -4,6 +4,11 @@
 #include "config.h"
 #include "Display.h"
 #include "Sensor.h"
+#include "HttpClient.h"
+
+#ifdef WITH_SERVO
+#include "Servo.h"
+#endif
 
 #include <Arduino.h>
 #include <ESP8266WiFi.h>
@@ -24,6 +29,8 @@ void setup()
 {
     // Connect with: pio device monitor
     Serial.begin(115200);
+    while (!Serial)
+        ;
     Serial.println();
     Serial.println("=== Setup ===");
 
@@ -46,7 +53,7 @@ void setup()
     Serial.println("--- Wi-Fi ---");
     WiFi.mode(WIFI_STA);
     WiFi.begin(WIFI_SSID, WIFI_PASS);
-    wifi_set_sleep_type(LIGHT_SLEEP_T);
+    //wifi_set_sleep_type(LIGHT_SLEEP_T);
 
     Serial.println("=== Loop ===");
 }
@@ -98,7 +105,7 @@ void loop()
     display.display();
     delay(500);
 
-    // Wait five minutes
+    // Wait N minutes
     if (timer == SEND_INTERVAL) {
         // Trigger the action
         timer = 0;
@@ -129,14 +136,66 @@ void loop()
         sensor.output_to_stream(Serial);
     });
 
-    // Send values to InfluxDB:
-    WiFiClient client;
     Serial.println();
-    Serial.println("* Connecting to " DB_HOST " ...");
-    display.drawText(2, "Send ");
-    display.display();
+
+    // Contact C&C server
+    HttpClient client(display);
     if (client.connect(DB_HOST, DB_PORT)) {
-        Serial.printf("* Connected (%s)\n", client.remoteIP().toString().c_str());
+        Serial.println("* Checking commands...");
+
+        int seq = -1;
+        bool device_checked = false;
+        bool cmd_feed = false;
+        auto status = client.query("GET", "/control/" DEVICE_NAME,
+                [&](const String& name, const String& value) {
+                    if (name == "X-Seq")
+                        seq = (int) value.toInt();
+                    else if (name == "X-Device" && value.equals(DEVICE_NAME))
+                        device_checked = true;
+                    else
+                        Serial.printf("hdr: %s: %s\n", name.c_str(), value.c_str());
+                },
+                [&](const String& line) {
+                    if (line == "feed")
+                        cmd_feed = true;
+                    else
+                        Serial.println("line: " + line);
+                });
+        client.stop();
+        Serial.println("* Status: " + String(status));
+        Serial.flush();
+
+        if (status == 200) {
+            if (!device_checked || seq == -1) {
+                Serial.printf("* Error: device_checked=%d seq=%d\n",
+                              device_checked, seq);
+                return;
+            }
+
+            if (cmd_feed) {
+                Serial.println("Feed!");
+            }
+
+            if (!client.reconnect())
+                return;
+
+            Serial.println("* Sending ack...");
+            client.query("DELETE", ("/control/" DEVICE_NAME "?seq=" + String(seq)).c_str(),
+                     [&](const String& name, const String& value) {
+                         Serial.printf("hdr: %s=%s", name.c_str(), value.c_str());
+                     },
+                     [](const String& line) {
+                         Serial.println("cnt: " + line);
+                     });
+            client.stop();
+        }
+        Serial.flush();
+
+#ifndef NO_SENSORS
+        // Send values to InfluxDB:
+        if (!client.reconnect())
+            return;
+
         Serial.println("* Sending data...");
         String data;
 
@@ -146,33 +205,12 @@ void loop()
 
         Serial.println(data);
 
-        client.printf(
-                "POST /write?db=" DB_NAME " HTTP/1.1\r\n"
-                "Host: " DB_HOST ":%d\r\n"
-                "Connection: close\r\n"
-                "Content-Type: text/plain; charset=utf-8\r\n"
-                "Content-Length: %d\r\n"
-                "\r\n",
-                DB_PORT, data.length());
-        client.print(data);
-
-        display.appendText("OK");
-        display.drawText(3, "Recv ");
-        display.display();
-
-        Serial.println("* Waiting for response...");
-        while (client.connected() || client.available()) {
-            if (client.available()) {
-                String line = client.readStringUntil('\n');
-                Serial.println(line);
-            }
-        }
+        client.post("/write?db=" DB_NAME, data);
         client.stop();
-        Serial.println("* Connection closed");
         display.appendText("OK");
         display.display();
+#endif
     } else {
-        Serial.println("* Connection failed.");
         client.stop();
         display.appendText("FAIL");
         display.display();

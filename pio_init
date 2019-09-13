@@ -65,25 +65,6 @@ if [[ -z "$ENV" ]]; then
     fi
 fi
 
-# Update platform.ini (env_default)
-if [[ "$ENV" != "$ENV_DEFAULT" ]]; then
-    run crudini --set platformio.ini platformio env_default ${ENV}
-fi
-
 # Call pio init with selected board
 BOARD=$(crudini --get platformio.ini env:${ENV} board)
 run platformio init --ide clion --board ${BOARD}
-
-# Install additional libs
-BUILD_FLAGS=$(crudini --get platformio.ini env:${ENV} build_flags)
-for flag in ${BUILD_FLAGS}; do
-    case "$flag" in
-        -DWITH_DALLAS_TEMP) run platformio lib install 54;;     # DallasTemperature
-        -DWITH_SHT30)       run platformio lib install 2932;;   # WEMOS SHT3x
-        -DWITH_BMP280)      run platformio lib install 2954;;   # BMP280
-        -DWITH_OLED)
-            run platformio lib install 2104   # SSD1306 OLED driver library for Wemos D1 Mini OLED shield
-            run platformio lib install 13     # Adafruit GFX Library
-            ;;
-    esac
-done

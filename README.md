@@ -38,7 +38,7 @@ Each device has to actively query for new firmware and commands.
 
 URLs:
 - `/update` - ArduinoOTA firmware update (each device gets its own firmware)
-- `/control` - Control commands for each device, headers contain "version" which indicates a change
+- `/control` - Control commands for each device, headers contain "X-Seq" which indicates a change
 - `/write` - sensor data, forward to InfluxDB
 
 Implementation:
