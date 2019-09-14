@@ -34,10 +34,9 @@ private:
     int m_pin_servo;
     int m_pin_button;
 
-    int pos = 0;    // variable to store the servo position
-    int maxpos = 160;
-    int step = 10;
-    int DELAY = 15;
+    int m_home_pos = 160;    // start in this pos and return here after sweep
+    int m_sweep_pos = 0;
+    int m_sweep_delay = 500;
 };
 
 #endif // include guard

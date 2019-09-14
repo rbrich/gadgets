@@ -6,8 +6,8 @@
 #include "Sensor.h"
 #include "HttpClient.h"
 
-#ifdef WITH_SERVO
-#include "Servo.h"
+#ifdef WITH_SWEEPER
+#include "Sweeper.h"
 #endif
 
 #include <Arduino.h>
@@ -25,6 +25,10 @@ static const int pin_rgb_blue = 13;
 static Display display;
 static int timer = 0;
 
+#ifdef WITH_SWEEPER
+static Sweeper sweeper(D6, D2);
+#endif
+
 void setup()
 {
     // Connect with: pio device monitor
@@ -41,6 +45,10 @@ void setup()
     pinMode(pin_rgb_red, OUTPUT);
     pinMode(pin_rgb_green, OUTPUT);
     pinMode(pin_rgb_blue, OUTPUT);
+#endif
+
+#ifdef WITH_SWEEPER
+    sweeper.setup();
 #endif
 
     Sensor::for_each([](Sensor& sensor) {
@@ -69,6 +77,11 @@ void loop()
     analogWrite(pin_rgb_blue, 0);
 #endif
     delay(500);
+
+#ifdef WITH_SWEEPER
+    if (sweeper.check_button())
+        sweeper.sweep();
+#endif
 
     // Present remaining time using RGB diode
     // - The value range is 0 .. 1024 (we use only 0..59)
@@ -174,6 +187,9 @@ void loop()
 
             if (cmd_feed) {
                 Serial.println("Feed!");
+#ifdef WITH_SWEEPER
+                sweeper.sweep();
+#endif
             }
 
             if (!client.reconnect())

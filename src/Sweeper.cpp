@@ -21,6 +21,7 @@ void Sweeper::setup()
 {
     pinMode(m_pin_button, INPUT);
     m_servo.attach(m_pin_servo);
+    m_servo.write(m_home_pos);
 }
 
 
@@ -40,9 +41,10 @@ void Sweeper::sweep()
 {
     Serial.println("* Sweep started");
 
-    m_servo.write(0);
-    delay(500);
-    m_servo.write(160);
+    m_servo.write(m_sweep_pos);
+    delay(m_sweep_delay);
+    m_servo.write(m_home_pos);
+    delay(m_sweep_delay);
 
     Serial.println("* Sweep complete");
 }
