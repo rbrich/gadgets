@@ -29,6 +29,8 @@ static int timer = 0;
 static Sweeper sweeper(D6, D2);
 #endif
 
+static int ctl_seq = -1;
+
 void setup()
 {
     // Connect with: pio device monitor
@@ -184,6 +186,12 @@ void loop()
                               device_checked, seq);
                 return;
             }
+
+            if (ctl_seq != -1 && seq == ctl_seq) {
+                // seq already seen
+                return;
+            }
+            ctl_seq = seq;
 
             if (cmd_feed) {
                 Serial.println("Feed!");
