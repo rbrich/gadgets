@@ -22,6 +22,7 @@ My development environment:
 * [PlatformIO Core](https://platformio.org/install/cli)
 * [crudini](https://www.pixelbeat.org/programs/crudini/)
 * [CLion IDE](https://www.jetbrains.com/clion/)
+  * [CLion + PlatformIO integration](https://docs.platformio.org/en/latest/integration/ide/clion.html)
 
 Step by step:
 

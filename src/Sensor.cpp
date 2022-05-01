@@ -283,7 +283,7 @@ void MoistSensor::output_to_stream(Stream &stream)
 
 void MoistSensor::output_to_database(String &query)
 {
-    query.concat("moisture,sensor=Generic" DEVICE_TAGS " value=");
+    query.concat("moisture,sensor=Generic," DEVICE_TAGS " value=");
     query.concat(m_value);
     query.concat('\n');
 }
