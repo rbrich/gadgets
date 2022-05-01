@@ -109,7 +109,7 @@ void DallasTempSensor::output_to_database(String &query)
 static SHT30Sensor s_sht30_sensor;
 
 
-SHT30Sensor::SHT30Sensor()
+SHT30Sensor::SHT30Sensor() noexcept
 {
     Sensor::add(&s_sht30_sensor);
 }
@@ -136,16 +136,14 @@ void SHT30Sensor::output_to_stream(Stream &stream)
 
 void SHT30Sensor::output_to_database(String &query)
 {
-#ifndef WITH_BMP280
     if (m_sht30.cTemp != 0.f) {
-        query.concat("temperature,sensor=BMP280," DEVICE_TAGS " value=");
+        query.concat("temperature,sensor=SHT30," DEVICE_TAGS " value=");
         query.concat(m_sht30.cTemp);
         query.concat('\n');
     }
-#endif
 
     if (m_sht30.humidity != 0.f) {
-        query.concat("humidity,sensor=BMP280," DEVICE_TAGS " value=");
+        query.concat("humidity,sensor=SHT30," DEVICE_TAGS " value=");
         query.concat(m_sht30.humidity);
         query.concat('\n');
     }
@@ -167,7 +165,7 @@ void SHT30Sensor::output_to_display(Display &display)
 
 static BMP280Sensor s_bmp280_sensor;
 
-BMP280Sensor::BMP280Sensor()
+BMP280Sensor::BMP280Sensor() noexcept
 {
     Sensor::add(&s_bmp280_sensor);
 }
@@ -242,7 +240,7 @@ void BMP280Sensor::output_to_display(Display &display)
 
 static MoistSensor s_moist_sensor;
 
-MoistSensor::MoistSensor()
+MoistSensor::MoistSensor() noexcept
 {
     Sensor::add(&s_moist_sensor);
 }
