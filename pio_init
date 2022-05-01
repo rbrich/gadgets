@@ -22,9 +22,9 @@ usage() {
     echo "Run without arguments to get list of known ENVs."
 }
 
-run() { echo "=> $@"; [[ "$DRY_RUN" -eq 1 ]] || "$@"; }
+run() { echo "=> $*"; [[ "$DRY_RUN" -eq 1 ]] || "$@"; }
 
-while [[ "$#" > 0 ]]; do
+while [[ "$#" -gt 0 ]]; do
     case "$1" in
         -h) usage; exit 0 ;;
         -n) DRY_RUN=1 ;;
@@ -39,10 +39,10 @@ if [[ -z "$ENV" ]]; then
     # Show options
     ENV_LIST=($(crudini --get platformio.ini | grep 'env:' | cut -d: -f2))
     ENV_COUNT=${#ENV_LIST[@]}
-    for i in `seq 1 ${ENV_COUNT}`; do
+    for i in $(seq 1 "${ENV_COUNT}"); do
         ITEM="${ENV_LIST[i-1]}"
         [[ "$ITEM" = "$ENV_DEFAULT" ]] && printf " * " || printf "   "
-        printf "[$i]\t$ITEM\n"
+        printf "[%s]\t%s\n" "$i" "$ITEM"
     done
 
     # Ask and process answer
@@ -52,7 +52,7 @@ if [[ -z "$ENV" ]]; then
     elif [[ "$ANS" -gt 0 && "$ANS" -le "$ENV_COUNT" ]] ; then
         ENV="${ENV_LIST[ANS-1]}"
     else
-        for i in `seq 1 ${ENV_COUNT}`; do
+        for i in $(seq 1 "${ENV_COUNT}"); do
             ITEM="${ENV_LIST[i-1]}"
             if [[ "$ITEM" = "$ANS" ]]; then
                 ENV=${ITEM}
@@ -66,5 +66,5 @@ if [[ -z "$ENV" ]]; then
 fi
 
 # Call pio init with selected board
-BOARD=$(crudini --get platformio.ini env:${ENV} board)
-run platformio init --ide clion --board ${BOARD}
+BOARD=$(crudini --get platformio.ini "env:${ENV}" board)
+run platformio init --ide clion --board "${BOARD}"

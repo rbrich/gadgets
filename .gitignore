@@ -3,4 +3,4 @@
 .piolibdeps
 CMakeLists.txt
 CMakeListsPrivate.txt
-/src/config.h
+/include/config.h
