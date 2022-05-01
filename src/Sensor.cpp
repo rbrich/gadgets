@@ -262,10 +262,11 @@ void MoistSensor::setup()
 void MoistSensor::read()
 {
     // Tested values:
-    // - emerged in water: 256
-    // - completely dry: 1024
+    // - emerged in water: 256 (100%)
+    // - completely dry (capacitive sensor): 715? (40%)
+    // - completely dry (resistive sensor): 1024 (0%)
     // Output range is 0.0 (dry) - 100.0 (emerged in water)
-    m_value = (1024 - analogRead(m_pin)) / 7.68f;
+    m_value = (1024.f - analogRead(m_pin)) / 7.68f;
     m_over_threshold = digitalRead(m_pin_digi);
 }
 

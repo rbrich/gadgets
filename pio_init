@@ -34,7 +34,7 @@ while [[ "$#" > 0 ]]; do
 done
 
 # Select env interactively
-ENV_DEFAULT=$(crudini --get platformio.ini platformio env_default)
+ENV_DEFAULT=$(crudini --get platformio.ini platformio default_envs)
 if [[ -z "$ENV" ]]; then
     # Show options
     ENV_LIST=($(crudini --get platformio.ini | grep 'env:' | cut -d: -f2))

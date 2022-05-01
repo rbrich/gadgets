@@ -1,5 +1,6 @@
 .pio
 .pioenvs
 .piolibdeps
+CMakeLists.txt
 CMakeListsPrivate.txt
 /src/config.h

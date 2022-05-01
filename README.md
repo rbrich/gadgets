@@ -17,17 +17,25 @@ I use InfluxDB + Grafana for collecting and presenting the sensor data.
 How to build a device
 ---------------------
 
+My development environment:
+
+* [PlatformIO Core](https://platformio.org/install/cli)
+* [crudini](https://www.pixelbeat.org/programs/crudini/)
+* [CLion IDE](https://www.jetbrains.com/clion/)
+
+Step by step:
+
 1. Buy hardware. See `platformio.ini` for the hardware I use. Assemble the headers, sensors etc.
 
 2. Select or add new env in `platformio.ini`, adjust `build_flags`.
 
 3. Copy `include/config.h.templ` to `include/config.h` and fill the credentials for Wi-Fi etc.
 
-3. Run `pio_init` to apply the changes (and install optional libraries)
+4. Run `./pio_init` to apply the changes (and install optional libraries)
 
-4. Connect the device and run `pio run --target upload` to program it.
+5. Connect the device and run `pio run --target upload` to program it.
 
-5. Debug with `pio device monitor`.
+6. Debug with `pio device monitor`.
 
 
 TODO: Control Server
